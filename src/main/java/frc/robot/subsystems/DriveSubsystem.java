@@ -3,13 +3,8 @@
 // the WPILib BSD license file in the root directory of this project.
 
 package frc.robot.subsystems;
-
-import com.pathplanner.lib.auto.AutoBuilder;
-import com.pathplanner.lib.config.PIDConstants;
-import com.pathplanner.lib.config.RobotConfig;
-import com.pathplanner.lib.controllers.PPHolonomicDriveController;
-
-import org.littletonrobotics.junction.LoggedRobot;
+//package frc.robot.subsystems.swervedrive;
+//import org.littletonrobotics.junction.LoggedRobot;
 import edu.wpi.first.hal.FRCNetComm.tInstances;
 import edu.wpi.first.hal.FRCNetComm.tResourceType;
 import edu.wpi.first.hal.HAL;
@@ -20,14 +15,31 @@ import edu.wpi.first.math.kinematics.SwerveDriveKinematics;
 import edu.wpi.first.math.kinematics.SwerveDriveOdometry;
 import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
-import edu.wpi.first.wpilibj.ADXRS450_Gyro;
 import edu.wpi.first.wpilibj.DriverStation;
+import com.pathplanner.lib.config.RobotConfig;
 import frc.robot.Constants;
+
+//import com.ctre.phoenix6.swerve.SimSwerveDrivetrain.SimSwerveModule;
+import com.pathplanner.lib.auto.AutoBuilder;
+import com.pathplanner.lib.commands.PathPlannerAuto;
+import com.pathplanner.lib.config.PIDConstants;
+import com.pathplanner.lib.controllers.PPHolonomicDriveController;
+import com.pathplanner.lib.path.PathConstraints;
+
+import edu.wpi.first.wpilibj.ADXRS450_Gyro;
+
 import frc.robot.Constants.DriveConstants;
+import swervelib.SwerveDrive;
+import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 
 
 public class DriveSubsystem extends SubsystemBase {
+
+  SwerveDrive swerveDrive;
+  private final SwerveDriveKinematics kinematics;
+  private final SimSwerveModule[] modules;
+
   // Create MAXSwerveModules
   private final MAXSwerveModule m_frontLeft = new MAXSwerveModule(
       DriveConstants.kFrontLeftDrivingCanId,
@@ -50,12 +62,12 @@ public class DriveSubsystem extends SubsystemBase {
       DriveConstants.kBackRightChassisAngularOffset);
 
   // The gyro sensor
-  private final ADXRS450_Gyro m_gyro = new ADXRS450_Gyro();
+  private final ADXRS450_Gyro m_gyro = new ADXRS450_Gyro(); //I did try a NavX, but there were some issues. This is the IMU in REV's template and it works great.
 
   // Odometry class for tracking robot pose
   SwerveDriveOdometry m_odometry = new SwerveDriveOdometry(
       DriveConstants.kDriveKinematics,
-      Rotation2d.fromDegrees(-m_gyro.getAngle()),
+      Rotation2d.fromDegrees(m_gyro.getAngle()),
       new SwerveModulePosition[] {
           m_frontLeft.getPosition(),
           m_frontRight.getPosition(),
@@ -65,32 +77,21 @@ public class DriveSubsystem extends SubsystemBase {
 
   /** Creates a new DriveSubsystem. */
   public DriveSubsystem() {
-    // Usage reporting for MAXSwerve template
+   setupPathPlanner(); //Call your AutoBuilder configuration here.
+   // Usage reporting for MAXSwerve template
     HAL.report(tResourceType.kResourceType_RobotDrive, tInstances.kRobotDriveSwerve_MaxSwerve);
-
-    AutoBuilder.configure(
-      this::getPose, // Robot pose supplier
-      this::resetOdometry, // Method to reset odometry (will be called if your auto has a starting pose)
-      this::getRobotRelativeSpeeds, // ChassisSpeeds supplier. MUST BE ROBOT RELATIVE
-      (speeds, feedforwards) -> driveRobotRelative(speeds), // Method that will drive the robot given ROBOT RELATIVE ChassisSpeeds. Also optionally outputs individual module feedforwards
-      new PPHolonomicDriveController( // PPHolonomicController is the built in path following controller for holonomic drive trains
-              new PIDConstants(5.0, 0.0, 0.0), // Translation PID constants
-              new PIDConstants(5.0, 0.0, 0.0) // Rotation PID constants
-      ),
-      Constants.config, // The robot configuration
-      () -> {
-        // Boolean supplier that controls when the path will be mirrored for the red alliance
-        // This will flip the path being followed to the red side of the field.
-        // THE ORIGIN WILL REMAIN ON THE BLUE SIDE
-
-        var alliance = DriverStation.getAlliance();
-        if (alliance.isPresent()) {
-          return alliance.get() == DriverStation.Alliance.Red;
-        }
-        return false;
-      },
-      this // Reference to this subsystem to set requirements
-);
+    modules = new SimSwerveModule[]{
+      new SimSwerveModule(),
+      new SimSwerveModule(),
+      new SimSwerveModule(),
+      new SimSwerveModule()
+    };
+    kinematics = new SwerveDriveKinematics(
+      Constants.Swerve.flModuleOffset, 
+      Constants.Swerve.frModuleOffset, 
+      Constants.Swerve.blModuleOffset, 
+      Constants.Swerve.brModuleOffset
+    );
   }
 
   @Override
@@ -158,6 +159,7 @@ public class DriveSubsystem extends SubsystemBase {
     m_frontRight.setDesiredState(swerveModuleStates[1]);
     m_rearLeft.setDesiredState(swerveModuleStates[2]);
     m_rearRight.setDesiredState(swerveModuleStates[3]);
+
   }
 
   /**
@@ -194,7 +196,7 @@ public class DriveSubsystem extends SubsystemBase {
 
   /** Zeroes the heading of the robot. */
   public void zeroHeading() {
-    m_gyro.reset();
+    m_gyro.reset(); 
   }
 
   /**
@@ -206,6 +208,75 @@ public class DriveSubsystem extends SubsystemBase {
     return Rotation2d.fromDegrees(m_gyro.getAngle()).getDegrees();
   }
 
+  /**
+   * Gets the current field-relative velocity (x, y and omega) of the robot
+   *
+   * @return A ChassisSpeeds object of the current field-relative velocity
+   */
+  
+  public ChassisSpeeds getFieldVelocity()
+  {
+    return swerveDrive.getFieldVelocity();
+  }
+
+ 
+  public void setStates(SwerveModuleState[] targetStates) {
+    SwerveDriveKinematics.desaturateWheelSpeeds(targetStates, Constants.Swerve.maxModuleSpeed);
+
+    for (int i = 0; i < modules.length; i++) {
+      modules[i].setTargetState(targetStates[i]);
+    }
+  }
+
+  class SimSwerveModule {
+    private SwerveModulePosition currentPosition = new SwerveModulePosition();
+    private SwerveModuleState currentState = new SwerveModuleState();
+
+    public SwerveModulePosition getPosition() {
+      return currentPosition;
+    }
+
+    public SwerveModuleState getState() {
+      return currentState;
+    }
+
+    public void setTargetState(SwerveModuleState targetState) {
+      currentState = SwerveModuleState.optimize(targetState, currentState.angle);
+
+      currentPosition = new SwerveModulePosition(currentPosition.distanceMeters + (currentState.speedMetersPerSecond * 0.02), currentState.angle);
+    }
+  }
+
+  /**
+   * Gets the current velocity (x, y and omega) of the robot
+   *
+   * @return A {@link ChassisSpeeds} object of the current velocity
+   */
+  
+  public ChassisSpeeds getRobotVelocity()
+  {
+    return swerveDrive.getRobotVelocity();
+  }
+
+  public ChassisSpeeds getRobotRelativeSpeeds(){
+    return Constants.DriveConstants.kDriveKinematics.toChassisSpeeds(m_frontLeft.getState(),
+      m_frontRight.getState(),
+      m_rearLeft.getState(),
+      m_rearRight.getState());
+  }
+
+  private void driveRobotRelative(ChassisSpeeds speeds){
+    drive(speeds, false);
+  }
+
+private void drive(ChassisSpeeds speeds, boolean fieldRelative) {
+    if (fieldRelative)
+        speeds = ChassisSpeeds.fromFieldRelativeSpeeds(speeds, getPose().getRotation());
+    speeds = ChassisSpeeds.discretize(speeds, 2); //LoggedRobot.defaultPeriodSecs
+    var swerveModuleStates = DriveConstants.kDriveKinematics.toSwerveModuleStates(speeds);
+    SwerveDriveKinematics.desaturateWheelSpeeds(swerveModuleStates, DriveConstants.kMaxSpeedMetersPerSecond);
+    setModuleStates(swerveModuleStates);
+}
 
   /**
    * Returns the turn rate of the robot.
@@ -216,29 +287,72 @@ public class DriveSubsystem extends SubsystemBase {
     return m_gyro.getRate() * (DriveConstants.kGyroReversed ? -1.0 : 1.0);
   }
 
-  private void driveRobotRelative(ChassisSpeeds speeds) {
-    drive(speeds, false);
-}
 
-private void drive(ChassisSpeeds speeds, boolean fieldRelative) {
-    if (fieldRelative)
-        speeds = ChassisSpeeds.fromFieldRelativeSpeeds(speeds, getPose().getRotation());
-    speeds = ChassisSpeeds.discretize(speeds, LoggedRobot.defaultPeriodSecs);
-    var swerveModuleStates = DriveConstants.kDriveKinematics.toSwerveModuleStates(speeds);
-    SwerveDriveKinematics.desaturateWheelSpeeds(swerveModuleStates, DriveConstants.kMaxSpeedMetersPerSecond);
-    setModuleStates(swerveModuleStates);
-}
+   public void setupPathPlanner()
+  {
 
-private SwerveModuleState[] getModuleStates() {
-  return new SwerveModuleState[] {
-          m_frontLeft.getState(),
-          m_frontRight.getState(),
-          m_rearLeft.getState(),
-          m_rearRight.getState()
-  };
-}
+    RobotConfig config;
+    try
+    {
+      config = RobotConfig.fromGUISettings(); //needs to be in a try/catch
+      
+      final boolean enableFeedforward = true;
+      
+      // Configure AutoBuilder last. Other sources say you can put this in your DriveSubsystem but I had errors doing that.
+      AutoBuilder.configure(
+          this::getPose,
+          this::resetOdometry,
+          this::getRobotRelativeSpeeds, 
+            (speeds, feedforwards) -> driveRobotRelative(speeds),
+            new PPHolonomicDriveController( // PPHolonomicController is the built in path following controller for holonomic drive trains
+                    new PIDConstants(0.04, 0.0, 0.0), // Translation PID constants
+                    new PIDConstants(1.0, 0.0, 0.0) // Rotation PID constants    (i usually match these to teleop driving constants.)
+            ),
+          config,
+          () -> {
+            // Boolean supplier that controls when the path will be mirrored for the red alliance
+            // This will flip the path being followed to the red side of the field.
+            // THE ORIGIN WILL REMAIN ON THE BLUE SIDE
 
-private ChassisSpeeds getRobotRelativeSpeeds() {
-    return DriveConstants.kDriveKinematics.toChassisSpeeds(getModuleStates());
-}
+            var alliance = DriverStation.getAlliance();
+            if (alliance.isPresent())
+            {
+              return alliance.get() == DriverStation.Alliance.Blue;
+            }
+            return false;
+          },
+          this
+          // Reference to this subsystem to set requirements
+                           );
+
+    } catch (Exception e)
+    {
+      e.printStackTrace();
+    }
+   
+    //Uncomment this if you want to monitor the configuration confirmation.
+    //System.out.println(AutoBuilder.isConfigured());
+    
+  
+  }
+
+  public Command getAutonomousCommand(String pathName) {
+    	return new PathPlannerAuto(pathName);
+  }
+ 
+  public Command driveToPose(Pose2d pose)
+  {
+
+	PathConstraints constraints = new PathConstraints(
+        2.8, 2.8,  			//these two are different instances of max speeds, you can make them the same. 
+        2 * Math.PI, 2 * Math.PI);	//same for these two angular speeds
+
+	// Since AutoBuilder is configured, we can use it to build pathfinding commands
+    	return AutoBuilder.pathfindToPose(
+        pose,
+        constraints,
+        edu.wpi.first.units.Units.MetersPerSecond.of(0) // Goal end velocity in meters/sec
+      );
+  }
+
 }

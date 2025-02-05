@@ -4,7 +4,7 @@
 
 package frc.robot;
 
-import com.pathplanner.lib.config.RobotConfig;
+import com.pathplanner.lib.config.PIDConstants;
 
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.kinematics.SwerveDriveKinematics;
@@ -24,13 +24,16 @@ import edu.wpi.first.math.util.Units;
  * constants are needed, to reduce verbosity.
  */
 public final class Constants {
-  public static RobotConfig config;{
-  try{
-    config = RobotConfig.fromGUISettings();
-    } catch (Exception e) {
-    // Handle exception as needed
-    e.printStackTrace();
-    }
+  public static final class Swerve {
+    public static final Translation2d flModuleOffset = new Translation2d(0.546 / 2.0, 0.546 / 2.0);
+    public static final Translation2d frModuleOffset = new Translation2d(0.546 / 2.0, -0.546 / 2.0);
+    public static final Translation2d blModuleOffset = new Translation2d(-0.546 / 2.0, 0.546 / 2.0);
+    public static final Translation2d brModuleOffset = new Translation2d(-0.546 / 2.0, -0.546 / 2.0);
+
+    public static final double maxModuleSpeed = 4.5; // M/S
+
+    public static final PIDConstants translationConstants = new PIDConstants(5.0, 0.0, 0.0);
+    public static final PIDConstants rotationConstants = new PIDConstants(5.0, 0.0, 0.0);
   }
   public static final class DriveConstants {
     // Driving Parameters - Note that these are not the maximum capable speeds of
