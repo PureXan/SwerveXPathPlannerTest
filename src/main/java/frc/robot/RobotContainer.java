@@ -24,6 +24,7 @@ import java.util.List;
 import frc.robot.Constants.AutoConstants;
 import frc.robot.Constants.DriveConstants;
 import frc.robot.Constants.OIConstants;
+import frc.robot.Main;
 //commands
 import frc.robot.commands.resetGyroValue;
 //subsystems
@@ -107,7 +108,7 @@ public class RobotContainer {
    * @return the command to run in autonomous
    */
   public Command getAutonomousCommand() {
-    return m_robotDrive.getAutonomousCommand("Example Auto");
+    return m_robotDrive.getAutonomousCommand("Foward + Rotate");
     /* 
     // Create config for trajectory
     TrajectoryConfig config = new TrajectoryConfig(
