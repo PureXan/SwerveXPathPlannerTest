@@ -308,7 +308,7 @@ private void drive(ChassisSpeeds speeds, boolean fieldRelative) {
             (speeds, feedforwards) -> driveRobotRelative(speeds),
             new PPHolonomicDriveController( // PPHolonomicController is the built in path following controller for holonomic drive trains
                     new PIDConstants(0.04, 0.0, 0.0), // Translation PID constants
-                    new PIDConstants(1.0, 0.0, 0.0) // Rotation PID constants    (i usually match these to teleop driving constants.)
+                    new PIDConstants(2.0, 0.0, 0.0) // Rotation PID constants    (i usually match these to teleop driving constants.)
             ),
           config,
           () -> {
